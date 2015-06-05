@@ -91,8 +91,8 @@ type Config struct {
 	EnableSwaggerSupport bool
 	// allow v1beta3 to be conditionally disabled
 	DisableV1Beta3 bool
-	// allow v1 to be conditionally enabled
-	EnableV1 bool
+	// allow v1 to be conditionally disabled
+	DisableV1 bool
 	// allow downstream consumers to disable the index route
 	EnableIndex           bool
 	EnableProfiling       bool
@@ -313,7 +313,7 @@ func New(c *Config) *Master {
 		authorizer:            c.Authorizer,
 		admissionControl:      c.AdmissionControl,
 		v1beta3:               !c.DisableV1Beta3,
-		v1:                    c.EnableV1,
+		v1:                    !c.DisableV1,
 		requestContextMapper:  c.RequestContextMapper,
 
 		cacheTimeout: c.CacheTimeout,
@@ -389,17 +389,10 @@ func logStackOnRecover(panicReason interface{}, httpWriter http.ResponseWriter) 
 
 // init initializes master.
 func (m *Master) init(c *Config) {
-	// TODO: make initialization of the helper part of the Master, and allow some storage
-	// objects to have a newer storage version than the user's default.
-	newerHelper, err := NewEtcdHelper(c.EtcdHelper.Client, "v1beta3", DefaultEtcdPathPrefix)
-	if err != nil {
-		glog.Fatalf("Unable to setup storage for v1beta3: %v", err)
-	}
-
 	podStorage := podetcd.NewStorage(c.EtcdHelper, c.KubeletClient)
 	podRegistry := pod.NewRegistry(podStorage.Pod)
 
-	podTemplateStorage := podtemplateetcd.NewREST(newerHelper)
+	podTemplateStorage := podtemplateetcd.NewREST(c.EtcdHelper)
 
 	eventRegistry := event.NewEtcdRegistry(c.EtcdHelper, uint64(c.EventTTL.Seconds()))
 	limitRangeRegistry := limitrange.NewEtcdRegistry(c.EtcdHelper)

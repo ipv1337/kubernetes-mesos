@@ -1243,11 +1243,14 @@ func deepCopy_api_PersistentVolumeSpec(in PersistentVolumeSpec, out *PersistentV
 	} else {
 		out.ClaimRef = nil
 	}
+	out.PersistentVolumeReclaimPolicy = in.PersistentVolumeReclaimPolicy
 	return nil
 }
 
 func deepCopy_api_PersistentVolumeStatus(in PersistentVolumeStatus, out *PersistentVolumeStatus, c *conversion.Cloner) error {
 	out.Phase = in.Phase
+	out.Message = in.Message
+	out.Reason = in.Reason
 	return nil
 }
 
@@ -1971,7 +1974,7 @@ func deepCopy_api_StatusCause(in StatusCause, out *StatusCause, c *conversion.Cl
 }
 
 func deepCopy_api_StatusDetails(in StatusDetails, out *StatusDetails, c *conversion.Cloner) error {
-	out.ID = in.ID
+	out.Name = in.Name
 	out.Kind = in.Kind
 	if in.Causes != nil {
 		out.Causes = make([]StatusCause, len(in.Causes))

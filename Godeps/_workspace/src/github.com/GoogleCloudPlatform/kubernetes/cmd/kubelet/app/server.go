@@ -288,6 +288,7 @@ func (s *KubeletServer) Run(_ []string) error {
 	if err != nil {
 		return err
 	}
+
 	mounter := mount.New()
 	if s.Containerized {
 		glog.V(2).Info("Running kubelet in containerized mode (experimental)")
