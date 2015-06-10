@@ -142,8 +142,12 @@ func (s *KubeletExecutorServer) Run(hks hyperkube.Interface, _ []string) error {
 		log.Info(err)
 	}
 
-	client, clientConfig, err := s.CreateAPIServerClient()
-	if err != nil && len(s.APIServerList) > 0 {
+	var apiclient *client.Client
+	clientConfig, err := s.CreateAPIServerClientConfig()
+	if err == nil {
+		apiclient, err = client.New(clientConfig)
+	}
+	if err != nil {
 		// required for k8sm since we need to send api.Binding information
 		// back to the apiserver
 		log.Fatalf("No API client: %v", err)
@@ -231,7 +235,7 @@ func (s *KubeletExecutorServer) Run(hks hyperkube.Interface, _ []string) error {
 		EnableServer:                   s.EnableServer,
 		EnableDebuggingHandlers:        s.EnableDebuggingHandlers,
 		DockerClient:                   dockertools.ConnectToDockerOrDie(s.DockerEndpoint),
-		KubeClient:                     client,
+		KubeClient:                     apiclient,
 		MasterServiceNamespace:         s.MasterServiceNamespace,
 		VolumePlugins:                  app.ProbeVolumePlugins(),
 		NetworkPlugins:                 app.ProbeNetworkPlugins(),
@@ -370,8 +374,8 @@ func (ks *KubeletExecutorServer) createAndInitKubelet(
 			}
 		},
 		ExitFunc: os.Exit,
-		PodStatusFunc: func(kl *kubelet.Kubelet, pod *api.Pod) (api.PodStatus, error) {
-			return kl.GeneratePodStatus(pod)
+		PodStatusFunc: func(kl *kubelet.Kubelet, pod *api.Pod) (*api.PodStatus, error) {
+			return kl.GetRuntime().GetPodStatus(pod)
 		},
 	})
 

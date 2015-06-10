@@ -234,7 +234,7 @@ type kubeScheduler struct {
 	podUpdates queue.FIFO
 }
 
-// Schedule implements the Scheduler interface of the Kubernetes.
+// Schedule implements the Scheduler interface of Kubernetes.
 // It returns the selectedMachine's name and error (if there's any).
 func (k *kubeScheduler) Schedule(pod *api.Pod, unused algorithm.MinionLister) (string, error) {
 	log.Infof("Try to schedule pod %v\n", pod.Name)
@@ -729,7 +729,7 @@ func (s *schedulingPlugin) Run(done <-chan struct{}) {
 func (s *schedulingPlugin) scheduleOne() {
 	pod := s.config.NextPod()
 	log.V(3).Infof("Attempting to schedule: %v", pod)
-	dest, err := s.config.Algorithm.Schedule(pod, s.config.MinionLister)
+	dest, err := s.config.Algorithm.Schedule(pod, s.config.MinionLister) // call kubeScheduler.Schedule
 	if err != nil {
 		log.V(1).Infof("Failed to schedule: %v", pod)
 		s.config.Recorder.Eventf(pod, "failedScheduling", "Error scheduling: %v", err)

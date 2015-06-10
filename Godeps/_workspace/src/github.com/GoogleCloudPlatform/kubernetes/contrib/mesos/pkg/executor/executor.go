@@ -95,13 +95,13 @@ type suicideWatcher interface {
 	Stop() bool
 }
 
-type podStatusFunc func() (api.PodStatus, error)
+type podStatusFunc func() (*api.PodStatus, error)
 
 // KubernetesExecutor is an mesos executor that runs pods
 // in a minion machine.
 type KubernetesExecutor struct {
-	kl                  *kubelet.Kubelet // the kubelet instance.
-	updateChan          chan<- interface{}
+	kl                  *kubelet.Kubelet   // the kubelet instance.
+	updateChan          chan<- interface{} // to send pod config updates to the kubelet
 	state               stateType
 	tasks               map[string]*kuberTask
 	pods                map[string]*api.Pod
@@ -109,8 +109,8 @@ type KubernetesExecutor struct {
 	sourcename          string
 	client              *client.Client
 	events              <-chan watch.Event
-	done                chan struct{} // signals shutdown
-	outgoing            chan func() (mesos.Status, error)
+	done                chan struct{}                     // signals shutdown
+	outgoing            chan func() (mesos.Status, error) // outgoing queue to the mesos driver
 	dockerClient        dockertools.DockerInterface
 	suicideWatch        suicideWatcher
 	suicideTimeout      time.Duration
@@ -118,21 +118,21 @@ type KubernetesExecutor struct {
 	kubeletFinished     <-chan struct{} // signals that kubelet Run() died
 	initialRegistration sync.Once
 	exitFunc            func(int)
-	podStatusFunc       func(*kubelet.Kubelet, *api.Pod) (api.PodStatus, error)
+	podStatusFunc       func(*kubelet.Kubelet, *api.Pod) (*api.PodStatus, error)
 }
 
 type Config struct {
 	Kubelet         *kubelet.Kubelet
-	Updates         chan<- interface{}
+	Updates         chan<- interface{} // to send pod config updates to the kubelet
 	SourceName      string
 	APIClient       *client.Client
 	Watch           watch.Interface
 	Docker          dockertools.DockerInterface
 	ShutdownAlert   func()
 	SuicideTimeout  time.Duration
-	KubeletFinished <-chan struct{}
+	KubeletFinished <-chan struct{} // signals that kubelet Run() died
 	ExitFunc        func(int)
-	PodStatusFunc   func(*kubelet.Kubelet, *api.Pod) (api.PodStatus, error)
+	PodStatusFunc   func(*kubelet.Kubelet, *api.Pod) (*api.PodStatus, error)
 }
 
 func (k *KubernetesExecutor) isConnected() bool {
@@ -231,7 +231,7 @@ func (k *KubernetesExecutor) onInitialRegistration() {
 	}
 }
 
-// Disconnected is called when the executor is disconnected with the slave.
+// Disconnected is called when the executor is disconnected from the slave.
 func (k *KubernetesExecutor) Disconnected(driver bindings.ExecutorDriver) {
 	if k.isDone() {
 		return
@@ -243,6 +243,11 @@ func (k *KubernetesExecutor) Disconnected(driver bindings.ExecutorDriver) {
 }
 
 // LaunchTask is called when the executor receives a request to launch a task.
+// The happens when the k8sm scheduler has decided to schedule the pod
+// (which corresponds to a Mesos Task) onto the node where this executor
+// is running, but the binding is not recorded in the Kubernetes store yet.
+// This function is invoked to tell the executor to record the binding in the
+// Kubernetes store and start the pod via the Kubelet.
 func (k *KubernetesExecutor) LaunchTask(driver bindings.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 	if k.isDone() {
 		return
@@ -467,7 +472,7 @@ func (k *KubernetesExecutor) launchTask(driver bindings.ExecutorDriver, taskId s
 	task.podName = podFullName
 	k.pods[podFullName] = pod
 
-	// Send the pod updates to the channel.
+	// send the latest snapshot of the set of pods to the kubelet via the pod update channel
 	update := kubelet.PodUpdate{Op: kubelet.SET}
 	for _, p := range k.pods {
 		update.Pods = append(update.Pods, p)
@@ -483,7 +488,7 @@ func (k *KubernetesExecutor) launchTask(driver bindings.ExecutorDriver, taskId s
 	k.sendStatus(driver, statusUpdate)
 
 	// Delay reporting 'task running' until container is up.
-	psf := podStatusFunc(func() (api.PodStatus, error) {
+	psf := podStatusFunc(func() (*api.PodStatus, error) {
 		return k.podStatusFunc(k.kl, pod)
 	})
 
@@ -497,7 +502,7 @@ func (k *KubernetesExecutor) _launchTask(driver bindings.ExecutorDriver, taskId,
 
 	getMarshalledInfo := func() (data []byte, cancel bool) {
 		// potentially long call..
-		if podStatus, err := psf(); err == nil {
+		if podStatus, err := psf(); err == nil && podStatus != nil {
 			select {
 			case <-expired:
 				cancel = true
@@ -518,7 +523,7 @@ func (k *KubernetesExecutor) _launchTask(driver bindings.ExecutorDriver, taskId,
 						Name:     podFullName,
 						SelfLink: "/podstatusresult",
 					},
-					Status: podStatus,
+					Status: *podStatus,
 				}
 				if data, err = json.Marshal(result); err != nil {
 					log.Errorf("failed to marshal pod status result: %v", err)

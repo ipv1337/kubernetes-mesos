@@ -16,6 +16,9 @@ limitations under the License.
 
 package kubelet
 
+// Note: if you change code in this file, you might need to change code in
+// contrib/mesos/pkg/executor/.
+
 import (
 	"errors"
 	"fmt"
@@ -54,6 +57,7 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
 	utilErrors "github.com/GoogleCloudPlatform/kubernetes/pkg/util/errors"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util/mount"
+	nodeutil "github.com/GoogleCloudPlatform/kubernetes/pkg/util/node"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/version"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/volume"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
@@ -1088,7 +1092,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 			// exist yet.
 			return
 		}
-		status, err := kl.GeneratePodStatus(pod)
+		status, err := kl.generatePodStatus(pod)
 		if err != nil {
 			glog.Errorf("Unable to generate status for pod with name %q and uid %q info with error(%v)", podFullName, uid, err)
 		} else {
@@ -1129,7 +1133,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 	}
 	kl.volumeManager.SetVolumes(pod.UID, podVolumes)
 
-	podStatus, err := kl.GeneratePodStatus(pod)
+	podStatus, err := kl.generatePodStatus(pod)
 	if err != nil {
 		glog.Errorf("Unable to get status for pod %q (uid %q): %v", podFullName, uid, err)
 		return err
@@ -1723,21 +1727,7 @@ func (kl *Kubelet) GetHostIP() (net.IP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot get node: %v", err)
 	}
-	addresses := node.Status.Addresses
-	addressMap := make(map[api.NodeAddressType][]api.NodeAddress)
-	for i := range addresses {
-		addressMap[addresses[i].Type] = append(addressMap[addresses[i].Type], addresses[i])
-	}
-	if addresses, ok := addressMap[api.NodeLegacyHostIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	if addresses, ok := addressMap[api.NodeInternalIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	if addresses, ok := addressMap[api.NodeExternalIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	return nil, fmt.Errorf("host IP unknown; known addresses: %v", addresses)
+	return nodeutil.GetNodeHostIP(node)
 }
 
 // GetPods returns all pods bound to the kubelet and their spec, and the mirror
@@ -2062,7 +2052,7 @@ func getPodReadyCondition(spec *api.PodSpec, statuses []api.ContainerStatus) []a
 
 // By passing the pod directly, this method avoids pod lookup, which requires
 // grabbing a lock.
-func (kl *Kubelet) GeneratePodStatus(pod *api.Pod) (api.PodStatus, error) {
+func (kl *Kubelet) generatePodStatus(pod *api.Pod) (api.PodStatus, error) {
 	podFullName := kubecontainer.GetPodFullName(pod)
 	glog.V(3).Infof("Generating status for %q", podFullName)
 
@@ -2238,4 +2228,10 @@ func (kl *Kubelet) ListenAndServe(address net.IP, port uint, tlsOptions *TLSOpti
 
 func (kl *Kubelet) ListenAndServeReadOnly(address net.IP, port uint) {
 	ListenAndServeKubeletReadOnlyServer(kl, address, port)
+}
+
+// GetRuntime returns the current Runtime implementation in use by the kubelet. This func
+// is exported to simplify integration with third party kubelet extensions (e.g. kubernetes-mesos).
+func (kl *Kubelet) GetRuntime() kubecontainer.Runtime {
+	return kl.containerRuntime
 }

@@ -17,6 +17,9 @@ limitations under the License.
 // Package app makes it easy to create a kubelet server for various contexts.
 package app
 
+// Note: if you change code in this file, you might need to change code in
+// contrib/mesos/pkg/executor/service/.
+
 import (
 	"crypto/tls"
 	"fmt"
@@ -48,6 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/master/ports"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util/mount"
+	nodeutil "github.com/GoogleCloudPlatform/kubernetes/pkg/util/node"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/volume"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/cloudprovider"
@@ -253,7 +257,11 @@ func (s *KubeletServer) Run(_ []string) error {
 		glog.Warning(err)
 	}
 
-	client, _, err := s.CreateAPIServerClient()
+	var apiclient *client.Client
+	clientConfig, err := s.CreateAPIServerClientConfig()
+	if err == nil {
+		apiclient, err = client.New(clientConfig)
+	}
 	if err != nil && len(s.APIServerList) > 0 {
 		glog.Warningf("No API client: %v", err)
 	}
@@ -333,7 +341,7 @@ func (s *KubeletServer) Run(_ []string) error {
 		EnableServer:                   s.EnableServer,
 		EnableDebuggingHandlers:        s.EnableDebuggingHandlers,
 		DockerClient:                   dockertools.ConnectToDockerOrDie(s.DockerEndpoint),
-		KubeClient:                     client,
+		KubeClient:                     apiclient,
 		MasterServiceNamespace:         s.MasterServiceNamespace,
 		VolumePlugins:                  ProbeVolumePlugins(),
 		NetworkPlugins:                 ProbeNetworkPlugins(),
@@ -383,7 +391,7 @@ func (s *KubeletServer) InitializeTLS() (*kubelet.TLSOptions, error) {
 	if s.TLSCertFile == "" && s.TLSPrivateKeyFile == "" {
 		s.TLSCertFile = path.Join(s.CertDirectory, "kubelet.crt")
 		s.TLSPrivateKeyFile = path.Join(s.CertDirectory, "kubelet.key")
-		if err := util.GenerateSelfSignedCert(util.GetHostname(s.HostnameOverride), s.TLSCertFile, s.TLSPrivateKeyFile); err != nil {
+		if err := util.GenerateSelfSignedCert(nodeutil.GetHostname(s.HostnameOverride), s.TLSCertFile, s.TLSPrivateKeyFile); err != nil {
 			return nil, fmt.Errorf("unable to generate self signed cert: %v", err)
 		}
 		glog.V(4).Infof("Using self-signed cert (%s, %s)", s.TLSCertFile, s.TLSPrivateKeyFile)
@@ -453,9 +461,13 @@ func (s *KubeletServer) createClientConfig() (*client.Config, error) {
 	return clientConfig, nil
 }
 
-func (s *KubeletServer) CreateAPIServerClient() (*client.Client, *client.Config, error) {
+// CreateAPIServerClientConfig generates a client.Config from command line flags,
+// including api-server-list, via createClientConfig and then injects chaos into
+// the configuration via addChaosToClientConfig. This func is exported to support
+// integration with third party kubelet extensions (e.g. kubernetes-mesos).
+func (s *KubeletServer) CreateAPIServerClientConfig() (*client.Config, error) {
 	if len(s.APIServerList) < 1 {
-		return nil, nil, fmt.Errorf("no api servers specified")
+		return nil, fmt.Errorf("no api servers specified")
 	}
 	// TODO: adapt Kube client to support LB over several servers
 	if len(s.APIServerList) > 1 {
@@ -464,14 +476,10 @@ func (s *KubeletServer) CreateAPIServerClient() (*client.Client, *client.Config,
 
 	clientConfig, err := s.createClientConfig()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	s.addChaosToClientConfig(clientConfig)
-	client, err := client.New(clientConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	return client, clientConfig, nil
+	return clientConfig, nil
 }
 
 // addChaosToClientConfig injects random errors into client connections if configured.
@@ -554,7 +562,7 @@ func SimpleKubelet(client *client.Client,
 //   3 Standalone 'kubernetes' binary
 // Eventually, #2 will be replaced with instances of #3
 func RunKubelet(kcfg *KubeletConfig, builder KubeletBuilder) error {
-	kcfg.Hostname = util.GetHostname(kcfg.HostnameOverride)
+	kcfg.Hostname = nodeutil.GetHostname(kcfg.HostnameOverride)
 	eventBroadcaster := record.NewBroadcaster()
 	kcfg.Recorder = eventBroadcaster.NewRecorder(api.EventSource{Component: "kubelet", Host: kcfg.Hostname})
 	eventBroadcaster.StartLogging(glog.Infof)

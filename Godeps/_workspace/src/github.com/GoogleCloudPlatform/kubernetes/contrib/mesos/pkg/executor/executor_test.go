@@ -305,8 +305,8 @@ func TestExecutorLaunchAndKillTask(t *testing.T) {
 			Version: testapi.Version(),
 		}),
 		Kubelet: &kubelet.Kubelet{},
-		PodStatusFunc: func(kl *kubelet.Kubelet, pod *api.Pod) (api.PodStatus, error) {
-			return api.PodStatus{
+		PodStatusFunc: func(kl *kubelet.Kubelet, pod *api.Pod) (*api.PodStatus, error) {
+			return &api.PodStatus{
 				ContainerStatuses: []api.ContainerStatus{
 					{
 						Name: "foo",
