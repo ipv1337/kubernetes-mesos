@@ -151,8 +151,6 @@ Assuming your framework is running on `${KUBERNETES_MASTER}`, then:
 
 ```shell
 $ bin/kubectl create -f examples/pod-nginx.json
-# -- or --
-$ curl -L ${KUBERNETES_MASTER}/api/v1beta1/pods -XPOST -d @examples/pod-nginx.json
 ```
 
 After the pod get launched, you can check it's status via `kubectl`, `curl` or your web browser:
@@ -160,107 +158,6 @@ After the pod get launched, you can check it's status via `kubectl`, `curl` or y
 $ bin/kubectl get pods
 POD          IP           CONTAINER(S)  IMAGE(S)          HOST                       LABELS    STATUS
 nginx-id-01  172.17.6.20  nginx-01      dockerfile/nginx  10.22.211.18/10.22.211.18  name=foo  Running
-
-# -- or --
-$ curl -L ${KUBERNETES_MASTER}/api/v1beta1/pods
-```
-```json
-{
-  "kind": "PodList",
-  "apiVersion": "v1beta3",
-  "metadata": {
-    "selfLink": "/api/v1beta3/pods",
-    "resourceVersion": "2737"
-  },
-  "items": [
-    {
-      "metadata": {
-        "name": "nginx-id-01",
-        "namespace": "default",
-        "selfLink": "/api/v1beta3/namespaces/default/pods/nginx-id-01",
-        "uid": "abb07592-ff00-11e4-9ed7-525400309a8f",
-        "resourceVersion": "2659",
-        "creationTimestamp": "2015-05-20T14:58:27Z",
-        "labels": {
-          "name": "foo"
-        },
-        "annotations": {
-          "k8s.mesosphere.io/bindingHost": "10.2.0.5",
-          "k8s.mesosphere.io/executorId": "9c19f22c1f751616_k8sm-executor",
-          "k8s.mesosphere.io/offerId": "20150511-114826-83886602-5050-28892-O136765",
-          "k8s.mesosphere.io/portName_TCP_http": "31000",
-          "k8s.mesosphere.io/port_TCP_80": "31000",
-          "k8s.mesosphere.io/slaveId": "20150503-133627-83886602-5050-1268-S0",
-          "k8s.mesosphere.io/taskId": "pod.abcf6023-ff00-11e4-9533-525400309a8f"
-        }
-      },
-      "spec": {
-        "containers": [
-          {
-            "name": "nginx-01",
-            "image": "library/nginx",
-            "ports": [
-              {
-                "name": "http",
-                "containerPort": 80,
-                "protocol": "TCP"
-              }
-            ],
-            "resources": {},
-            "livenessProbe": {
-              "httpGet": {
-                "path": "/",
-                "port": "80"
-              },
-              "initialDelaySeconds": 30,
-              "timeoutSeconds": 1
-            },
-            "terminationMessagePath": "/dev/termination-log",
-            "imagePullPolicy": "IfNotPresent",
-            "capabilities": {},
-            "securityContext": {
-              "capabilities": {},
-              "privileged": false
-            }
-          }
-        ],
-        "restartPolicy": "Always",
-        "dnsPolicy": "ClusterFirst",
-        "serviceAccount": "",
-        "host": "10.2.0.5"
-      },
-      "status": {
-        "phase": "Running",
-        "Condition": [
-          { 
-            "type": "Ready",
-            "status": "True"
-          }
-        ],
-        "hostIP": "10.2.0.5",
-        "podIP": "172.17.0.5",
-        "startTime": "2015-05-20T14:58:33Z",
-        "containerStatuses": [
-          { 
-            "name": "nginx-01",
-            "state": {
-              "running": {
-                "startedAt": "2015-05-20T14:58:33Z"
-              }
-            },
-            "lastState": {},
-            "ready": true,
-            "restartCount": 0,
-            "image": "library/nginx",
-            "imageID": "docker://e32512dcfa0db6be6c122ce21c35a2c8746bb64eaaa6a13be981c5bdcf528d19",
-            "containerID": "docker://705bca065663290a8663679ae5eb5834060f57eb84577af11f1a06e498ac725b"
-          }
-        ]
-      }
-    }
-  ]
-}
-```
 
 Or, you can run `docker ps` on the appropriate Mesos slave to verify that the example container is running:
 
@@ -277,8 +174,6 @@ Assuming your framework is running on `${KUBERNETES_MASTER}` and that you have m
 
 ```shell
 $ bin/kubectl create -f examples/controller-nginx.json
-# -- or --
-$ curl -L ${KUBERNETES_MASTER}/api/v1beta1/replicationControllers -XPOST -d@examples/controller-nginx.json
 ```
 
 After the pod get launched, you can check it's status via `kubectl`, `curl` or your web browser:
@@ -286,84 +181,6 @@ After the pod get launched, you can check it's status via `kubectl`, `curl` or y
 $ bin/kubectl get replicationControllers
 CONTROLLER          CONTAINER(S)        IMAGE(S)            SELECTOR            REPLICAS
 nginxcontroller     nginx               dockerfile/nginx    name=nginx          2
-
-# -- or --
-$ curl -L ${KUBERNETES_MASTER}/api/v1beta1/replicationControllers
-```
-```json
-{
-  "kind": "ReplicationControllerList",
-  "creationTimestamp": null,
-  "selfLink": "/api/v1beta1/replicationControllers?namespace=",
-  "resourceVersion": 3087,
-  "apiVersion": "v1beta1",
-  "items": [
-    {
-      "id": "nginxcontroller",
-      "uid": "5f091198-bd18-11e4-90fa-42010adf71e3",
-      "creationTimestamp": "2015-02-25T18:01:49Z",
-      "selfLink": "/api/v1beta1/replicationControllers/nginxcontroller?namespace=default",
-      "resourceVersion": 3041,
-      "namespace": "default",
-      "desiredState": {
-        "replicas": 2,
-        "replicaSelector": {
-          "name": "nginx"
-        },
-        "podTemplate": {
-          "desiredState": {
-            "manifest": {
-              "version": "v1beta2",
-              "id": "",
-              "volumes": null,
-              "containers": [
-                {
-                  "name": "nginx",
-                  "image": "dockerfile/nginx",
-                  "ports": [
-                    {
-                      "hostPort": 31001,
-                      "containerPort": 80,
-                      "protocol": "TCP"
-                    }
-                  ],
-                  "resources": {},
-                  "terminationMessagePath": "/dev/termination-log",
-                  "imagePullPolicy": "PullIfNotPresent",
-                  "capabilities": {}
-                }
-              ],
-              "restartPolicy": {
-                "always": {}
-              },
-              "dnsPolicy": "ClusterFirst"
-            }
-          },
-          "labels": {
-            "name": "nginx"
-          }
-        }
-      },
-      "currentState": {
-        "replicas": 2,
-        "podTemplate": {
-          "desiredState": {
-            "manifest": {
-              "version": "",
-              "id": "",
-              "volumes": null,
-              "containers": null,
-              "restartPolicy": {}
-            }
-          }
-        }
-      },
-      "labels": {
-        "name": "nginx"
-      }
-    }
-  ]
-}
 ```
 
 ### Test
@@ -371,7 +188,7 @@ $ curl -L ${KUBERNETES_MASTER}/api/v1beta1/replicationControllers
 Run test suite with:
 
 ```shell
-$ make test.v
+$ make test
 ```
 
 #### Test Coverage
